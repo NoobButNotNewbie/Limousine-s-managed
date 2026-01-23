@@ -1,0 +1,1 @@
+﻿// Vehicle availability & lookup logic

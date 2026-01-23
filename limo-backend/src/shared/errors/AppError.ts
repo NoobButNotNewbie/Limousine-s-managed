@@ -1,0 +1,1 @@
+﻿// Base application error

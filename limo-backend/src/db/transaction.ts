@@ -1,0 +1,1 @@
+﻿// Helper for DB transactions
