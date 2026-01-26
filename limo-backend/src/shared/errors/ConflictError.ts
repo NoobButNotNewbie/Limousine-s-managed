@@ -1,1 +1,2 @@
-﻿// Conflict / business rule violation error
+﻿// Re-export from AppError
+export { ConflictError } from './AppError';
