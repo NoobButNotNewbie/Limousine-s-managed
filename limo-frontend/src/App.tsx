@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import BookingFlow from './pages/BookingFlow';
-import Confirmation from './pages/Confirmation'; // Fix import
+import BookingFlow from './pages/BookingFlow.tsx';
+import Confirmation from './pages/Confirmation.tsx';
 import Home from './pages/Home';
 
 function App() {
