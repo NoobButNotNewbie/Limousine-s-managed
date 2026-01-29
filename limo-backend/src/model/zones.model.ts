@@ -1,11 +1,6 @@
-export enum Zone {
-  ThanhHoa   = 'Thanh Hoa',
-  HaNoi      = 'Ha Noi',
-  HaiPhong   = 'Hai Phong',
-  QuangNinh  = 'Quang Ninh',
-  LaoCai     = 'Lao Cai',
-  LangSon    = 'Lang Son',
-  SonLa      = 'Son La',
-  ThaiNguyen = 'Thai Nguyen',
-  NinhBinh   = 'Ninh Binh',
+import { Zone } from './enum/zone.enum';
+
+export interface Zones {
+  zone_id: number;
+  zone_name: Zone;
 }

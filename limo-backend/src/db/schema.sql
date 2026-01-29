@@ -24,7 +24,7 @@ CREATE TABLE zones (
 
 CREATE TABLE clients (
     client_id  SERIAL PRIMARY KEY,
-    name       TEXT NOT NULL,
+    client_name       TEXT NOT NULL,
     phone      TEXT NOT NULL UNIQUE,
     email      TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT now()
@@ -32,13 +32,15 @@ CREATE TABLE clients (
 
 CREATE TABLE drivers (
     driver_id SERIAL PRIMARY KEY,
-    name      TEXT NOT NULL,
+    driver_name      TEXT NOT NULL,
     phone     TEXT NOT NULL UNIQUE
+    email     TEXT,
+    license_number TEXT NOT NULL UNIQUE,
 );
 
 CREATE TABLE vehicles (
     vehicle_id   SERIAL PRIMARY KEY,
-    plate_number TEXT NOT NULL UNIQUE,
+    license_plate TEXT NOT NULL UNIQUE,
     seat_count   INT NOT NULL CHECK (seat_count = 9)
 );
 
@@ -148,6 +150,8 @@ CREATE TABLE bookings (
     seat_number INT NOT NULL CHECK (seat_number BETWEEN 1 AND 9),
     price       INT NOT NULL CHECK (price > 0),
 
+    pick_up TEXT NOT NULL,
+    drop_off TEXT NOT NULL,
 
     cancelled_at TIMESTAMP   
         CHECK (
