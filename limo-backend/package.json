@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "commonjs",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/app.ts",
+    "dev": "nodemon --exec ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/app.js"
   },
@@ -14,18 +14,18 @@
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "ioredis": "^5.9.2",
-    "pg": "^8.17.2",
     "node-cron": "^4.2.1",
-    "nodemailer": "^7.0.12"
+    "nodemailer": "^7.0.12",
+    "pg": "^8.17.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11",
-    "typescript": "^5.9.3",
-    "ts-node": "^10.9.2",
-    "@types/node": "^25.0.10",
-    "@types/express": "^5.0.6",
     "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.10",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.16.0",
-    "@types/node-cron": "^3.0.11"
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

@@ -13,7 +13,7 @@ import { createOtp, verifyOtp } from '../../shared/utils/otp';
 import { Booking, BookingWithDetails, CreateCustomerDto, InitiateBookingDto } from '../../shared/types';
 import { NotFoundError, OtpError, SeatLockError } from '../../shared/errors/AppError';
 import { SEAT_LOCK_TTL_SECONDS, OTP_TTL_SECONDS } from '../../shared/constants';
-import db from '../../db/client';
+import db from '../../db/clients';
 import * as notificationService from '../notifications/notification.service';
 
 /**

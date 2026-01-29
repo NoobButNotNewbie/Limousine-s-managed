@@ -2,7 +2,7 @@
 // VEHICLE REPOSITORY - Database Operations
 // ================================================
 
-import db from '../../db/client';
+import db from '../../db/clients';
 import { Vehicle, Seat, VehicleWithSeats } from '../../shared/types';
 import { mapDbError } from '../../shared/errors/mapDbError';
 import { SEAT_COUNT, getSeatPosition, getSeatPrice } from '../../shared/constants';

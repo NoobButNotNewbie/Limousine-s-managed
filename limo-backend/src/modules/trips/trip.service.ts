@@ -9,7 +9,7 @@ import { validateTripKey, normalizeTripKey, validateTripForBooking } from './tri
 import { Trip, TripKey, TripWithVehicles, AvailableTrip } from '../../shared/types';
 import { NotFoundError } from '../../shared/errors/AppError';
 import { TRIP_STATUS } from '../../shared/constants';
-import db from '../../db/client';
+import db from '../../db/clients';
 
 /**
  * Resolve or create a trip for the given key

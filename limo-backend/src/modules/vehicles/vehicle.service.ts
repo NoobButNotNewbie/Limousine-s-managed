@@ -3,7 +3,7 @@
 // ================================================
 
 import * as vehicleRepo from './vehicle.repo';
-import db from '../../db/client';
+import db from '../../db/clients';
 import { Vehicle, VehicleWithSeats } from '../../shared/types';
 import { NotFoundError } from '../../shared/errors/AppError';
 

@@ -2,7 +2,7 @@
 // SEAT REPOSITORY - Database Operations
 // ================================================
 
-import db from '../../db/client';
+import db from '../../db/clients';
 import { Seat } from '../../shared/types';
 import { mapDbError } from '../../shared/errors/mapDbError';
 

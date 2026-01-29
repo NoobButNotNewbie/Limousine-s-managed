@@ -1,130 +1,249 @@
--- ================================================
--- LIMOUSINE BOOKING SYSTEM - DATABASE SCHEMA
--- ================================================
+-- ============================================================================
+-- LIMOUSINE BOOKING SYSTEM — CLEAN FINAL SCHEMA
+-- ============================================================================
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
--- ================================================
--- TRIPS TABLE
--- ================================================
--- A trip represents a scheduled journey from zone A to zone B
--- Multiple vehicles can be attached to a single trip
-CREATE TABLE trips (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    zone_from VARCHAR(100) NOT NULL,
-    zone_to VARCHAR(100) NOT NULL,
-    date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    complete_time TIME NOT NULL,
-    status VARCHAR(20) DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'CONFIRMED', 'CANCELLED', 'COMPLETED')),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    -- Unique constraint for trip key
-    CONSTRAINT unique_trip_key UNIQUE (zone_from, zone_to, date, start_time),
-    
-    -- Time must be between 04:00 and 22:00
-    CONSTRAINT valid_start_time CHECK (start_time >= '04:00:00' AND start_time <= '22:00:00'),
-    
-    -- Time must be on the hour (HH:00:00)
-    CONSTRAINT hourly_start_time CHECK (EXTRACT(MINUTE FROM start_time) = 0 AND EXTRACT(SECOND FROM start_time) = 0)
+-- ============================================================================
+-- ENUMS
+-- ============================================================================
+CREATE TYPE zone_name_enum AS ENUM (
+    'Thanh Hoa', 'Ha Noi', 'Hai Phong', 'Quang Ninh',
+    'Lao Cai', 'Lang Son', 'Son La', 'Thai Nguyen', 'Ninh Binh'
 );
 
--- Index for searching trips
-CREATE INDEX idx_trips_search ON trips(zone_from, zone_to, date, status);
-CREATE INDEX idx_trips_date_status ON trips(date, status);
+CREATE TYPE seat_tier_enum AS ENUM ('front', 'middle', 'back');
 
--- ================================================
--- VEHICLES TABLE
--- ================================================
--- Each vehicle belongs to a trip and has 9 seats
+-- ============================================================================
+-- MASTER DATA
+-- ============================================================================
+CREATE TABLE zones (
+    zone_id   SERIAL PRIMARY KEY,
+    zone_name zone_name_enum NOT NULL UNIQUE
+);
+
+CREATE TABLE clients (
+    client_id  SERIAL PRIMARY KEY,
+    name       TEXT NOT NULL,
+    phone      TEXT NOT NULL UNIQUE,
+    email      TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE TABLE drivers (
+    driver_id SERIAL PRIMARY KEY,
+    name      TEXT NOT NULL,
+    phone     TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE vehicles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
-    vehicle_number INT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    CONSTRAINT unique_vehicle_per_trip UNIQUE (trip_id, vehicle_number)
+    vehicle_id   SERIAL PRIMARY KEY,
+    plate_number TEXT NOT NULL UNIQUE,
+    seat_count   INT NOT NULL CHECK (seat_count = 9)
 );
 
-CREATE INDEX idx_vehicles_trip ON vehicles(trip_id);
-
--- ================================================
--- SEATS TABLE
--- ================================================
--- Each seat belongs to a vehicle with fixed pricing by position
--- Positions: front(1-4), middle(5-6), back(7-9)
-CREATE TABLE seats (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
-    seat_number INT NOT NULL CHECK (seat_number BETWEEN 1 AND 9),
-    position VARCHAR(10) NOT NULL CHECK (position IN ('front', 'middle', 'back')),
-    price DECIMAL(12, 0) NOT NULL,
-    
-    CONSTRAINT unique_seat_per_vehicle UNIQUE (vehicle_id, seat_number)
+-- ============================================================================
+-- SEAT PRICING
+-- ============================================================================
+CREATE TABLE seat_tier_prices (
+    tier  seat_tier_enum PRIMARY KEY,
+    price INT NOT NULL CHECK (price > 0)
 );
 
-CREATE INDEX idx_seats_vehicle ON seats(vehicle_id);
+INSERT INTO seat_tier_prices VALUES
+('front', 300000),
+('middle', 250000),
+('back', 200000);
 
--- ================================================
--- CUSTOMERS TABLE
--- ================================================
-CREATE TABLE customers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    phone VARCHAR(20) NOT NULL,
-    email VARCHAR(150) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE OR REPLACE FUNCTION get_seat_tier(seat_num INT)
+RETURNS seat_tier_enum IMMUTABLE AS $$
+BEGIN
+    IF seat_num BETWEEN 1 AND 4 THEN RETURN 'front';
+    ELSIF seat_num BETWEEN 5 AND 6 THEN RETURN 'middle';
+    ELSIF seat_num BETWEEN 7 AND 9 THEN RETURN 'back';
+    ELSE RAISE EXCEPTION 'Invalid seat number %', seat_num;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- TRIPS
+-- ============================================================================
+CREATE TABLE trips (
+    trip_id SERIAL PRIMARY KEY,
+
+    zone_from_id INT NOT NULL REFERENCES zones(zone_id),
+    zone_to_id   INT NOT NULL REFERENCES zones(zone_id),
+
+    start_time   TIMESTAMP NOT NULL,
+    cancelled_at TIMESTAMP,
+
+    completed_at TIMESTAMP GENERATED ALWAYS AS
+        (start_time + INTERVAL '5 hours') STORED,
+
+    CHECK (zone_from_id <> zone_to_id),
+    CHECK (EXTRACT(MINUTE FROM start_time) = 0),
+    CHECK (EXTRACT(HOUR FROM start_time) BETWEEN 4 AND 22)
 );
 
-CREATE INDEX idx_customers_phone ON customers(phone);
-CREATE INDEX idx_customers_email ON customers(email);
+CREATE UNIQUE INDEX uq_trip_slot
+ON trips(zone_from_id, zone_to_id, start_time);
 
--- ================================================
--- BOOKINGS TABLE
--- ================================================
-CREATE TABLE bookings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trip_id UUID NOT NULL REFERENCES trips(id),
-    vehicle_id UUID NOT NULL REFERENCES vehicles(id),
-    seat_id UUID NOT NULL REFERENCES seats(id),
-    customer_id UUID NOT NULL REFERENCES customers(id),
-    status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'EXPIRED')),
-    otp_code VARCHAR(6),
-    otp_expires_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    confirmed_at TIMESTAMPTZ,
-    
-    -- One booking per seat
-    CONSTRAINT unique_seat_booking UNIQUE (seat_id)
+-- ============================================================================
+-- VEHICLE RESERVATIONS (1 trip → many vehicles)
+-- ============================================================================
+CREATE TABLE vehicle_reservations (
+    reservation_id SERIAL PRIMARY KEY,
+    trip_id    INT NOT NULL REFERENCES trips(trip_id),
+    vehicle_id INT NOT NULL REFERENCES vehicles(vehicle_id),
+    driver_id  INT REFERENCES drivers(driver_id),
+
+    reserved_from TIMESTAMP NOT NULL,
+    reserved_to   TIMESTAMP NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    CHECK (reserved_to = reserved_from + INTERVAL '5 hours')
 );
 
-CREATE INDEX idx_bookings_trip ON bookings(trip_id);
-CREATE INDEX idx_bookings_customer ON bookings(customer_id);
-CREATE INDEX idx_bookings_status ON bookings(status);
-
--- ================================================
--- FUNCTIONS
--- ================================================
-
--- Function to auto-update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION fill_reservation_time()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
+    SELECT start_time,
+           start_time + INTERVAL '5 hours'
+    INTO NEW.reserved_from, NEW.reserved_to
+    FROM trips WHERE trip_id = NEW.trip_id;
+
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Trigger for trips updated_at
-CREATE TRIGGER update_trips_updated_at
-    BEFORE UPDATE ON trips
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_fill_reservation_time
+BEFORE INSERT ON vehicle_reservations
+FOR EACH ROW EXECUTE FUNCTION fill_reservation_time();
 
--- ================================================
--- SEED DATA: Default seat prices (VND)
--- Front: 250,000 | Middle: 200,000 | Back: 150,000
--- ================================================
--- Prices are set when seats are created via the application
+ALTER TABLE vehicle_reservations
+ADD CONSTRAINT no_vehicle_overlap
+EXCLUDE USING gist (
+    vehicle_id WITH =,
+    tsrange(reserved_from, reserved_to, '[)') WITH &&
+);
+
+CREATE INDEX idx_bookings_reservation
+ON bookings(reservation_id)
+WHERE cancelled_at IS NULL;
+
+CREATE INDEX idx_reservations_trip
+ON vehicle_reservations(trip_id);
+
+-- ============================================================================
+-- BOOKINGS (created ONLY after OTP)
+-- ============================================================================
+CREATE TABLE bookings (
+    booking_id SERIAL PRIMARY KEY,
+    trip_id    INT NOT NULL REFERENCES trips(trip_id),
+
+    reservation_id INT NOT NULL REFERENCES vehicle_reservations(reservation_id),
+    client_id      INT NOT NULL REFERENCES clients(client_id),
+
+    seat_number INT NOT NULL CHECK (seat_number BETWEEN 1 AND 9),
+    price       INT NOT NULL CHECK (price > 0),
+
+
+    cancelled_at TIMESTAMP   
+        CHECK (
+            cancelled_at IS NULL
+            OR cancelled_at <= start_time
+        ),
+
+    created_at   TIMESTAMP NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE bookings IS 'Booking is created ONLY after OTP verified';
+COMMENT ON COLUMN bookings.cancelled_at IS 'Set by backend or trip cancellation';
+
+-- ============================================================================
+-- BOOKING SAFETY
+-- ============================================================================
+CREATE OR REPLACE FUNCTION fill_booking_trip_id()
+RETURNS TRIGGER AS $$
+DECLARE
+    actual_trip_id INT;
+BEGIN
+    SELECT trip_id INTO actual_trip_id
+    FROM vehicle_reservations
+    WHERE reservation_id = NEW.reservation_id;
+
+    IF actual_trip_id IS NULL THEN
+        RAISE EXCEPTION 'Invalid reservation_id %', NEW.reservation_id;
+    END IF;
+
+    IF NEW.trip_id IS NOT NULL AND NEW.trip_id <> actual_trip_id THEN
+        RAISE EXCEPTION 'trip_id mismatch';
+    END IF;
+
+    NEW.trip_id := actual_trip_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_fill_booking_trip
+BEFORE INSERT ON bookings
+FOR EACH ROW EXECUTE FUNCTION fill_booking_trip_id();
+
+CREATE OR REPLACE FUNCTION prevent_booking_on_cancelled_trip()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM trips
+        WHERE trip_id = NEW.trip_id
+          AND cancelled_at IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'Cannot book cancelled trip';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_booking_cancelled_trip
+BEFORE INSERT ON bookings
+FOR EACH ROW EXECUTE FUNCTION prevent_booking_on_cancelled_trip();
+
+CREATE OR REPLACE FUNCTION cancel_bookings_on_trip_cancel()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.cancelled_at IS NOT NULL AND OLD.cancelled_at IS NULL THEN
+        UPDATE bookings
+        SET cancelled_at = NEW.cancelled_at
+        WHERE trip_id = NEW.trip_id
+          AND cancelled_at IS NULL;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_cancel_bookings_on_trip_cancel
+AFTER UPDATE ON trips
+FOR EACH ROW EXECUTE FUNCTION cancel_bookings_on_trip_cancel();
+
+-- ============================================================================
+-- PRICE + SEAT LOCK
+-- ============================================================================
+CREATE OR REPLACE FUNCTION fill_booking_price()
+RETURNS TRIGGER AS $$
+BEGIN
+    SELECT price INTO NEW.price
+    FROM seat_tier_prices
+    WHERE tier = get_seat_tier(NEW.seat_number);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_fill_booking_price
+BEFORE INSERT ON bookings
+FOR EACH ROW WHEN (NEW.price IS NULL)
+EXECUTE FUNCTION fill_booking_price();
+
+CREATE UNIQUE INDEX uq_seat_lock
+ON bookings(reservation_id, seat_number)
+WHERE cancelled_at IS NULL;

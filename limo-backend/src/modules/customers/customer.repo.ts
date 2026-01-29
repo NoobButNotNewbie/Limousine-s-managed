@@ -2,7 +2,7 @@
 // CUSTOMER REPOSITORY - Database Operations
 // ================================================
 
-import db from '../../db/client';
+import db from '../../db/clients';
 import { Customer, CreateCustomerDto } from '../../shared/types';
 import { mapDbError } from '../../shared/errors/mapDbError';
 import { PoolClient } from 'pg';

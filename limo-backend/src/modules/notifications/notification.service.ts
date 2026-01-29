@@ -3,7 +3,7 @@
 // ================================================
 
 import nodemailer from 'nodemailer';
-import env from '../../config/env';
+import env from "../../config/pool";
 import { BookingWithDetails, Trip } from '../../shared/types';
 import { formatDate, formatTime } from '../../shared/utils/datetime';
 
